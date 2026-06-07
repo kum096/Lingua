@@ -5,5 +5,3 @@ Implement the language selection screen UI based on the attached design. Use the
 Replace "See all languages" with confirmation button and use the earth image from the assets folder properly.
 
 Add a link on the home screen route (/) to navigate to the language selection screen route.
-
-@prompt_material/04-language-selection-screen.png

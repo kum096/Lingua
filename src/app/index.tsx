@@ -1,5 +1,5 @@
 import { useAuth, useClerk } from "@clerk/expo";
-import { Link, Redirect, useRouter } from "expo-router";
+import { Href, Link, Redirect, useRouter } from "expo-router";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 export default function Index() {
@@ -36,6 +36,16 @@ export default function Index() {
         >
           <Text className="font-poppins-semibold text-[16px] leading-[22px] text-black">
             Open onboarding
+          </Text>
+        </TouchableOpacity>
+      </Link>
+      <Link href={"/language-selection" as Href} asChild>
+        <TouchableOpacity
+          activeOpacity={0.86}
+          className="mt-4 h-14 items-center justify-center rounded-[18px] bg-lingua-deep-purple px-8"
+        >
+          <Text className="font-poppins-semibold text-[16px] leading-[22px] text-black">
+            Choose language
           </Text>
         </TouchableOpacity>
       </Link>
