@@ -1,6 +1,14 @@
+import {
+  isClerkAPIResponseError,
+  useSSO,
+} from "@clerk/expo";
+import { useSignIn, useSignUp } from "@clerk/expo/legacy";
+import type { OAuthStrategy } from "@clerk/expo/types";
 import { images } from "@/constants/images";
 import { Image } from "expo-image";
+import * as Linking from "expo-linking";
 import { Href, Link, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useRef, useState } from "react";
 import {
   ScrollView,
@@ -14,7 +22,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { VerificationCodeModal } from "./verification-code-modal";
 
+WebBrowser.maybeCompleteAuthSession();
+
 type AuthMode = "sign-up" | "sign-in";
+type VerificationMode = AuthMode | null;
 
 type AuthScreenProps = {
   mode: AuthMode;
@@ -70,9 +81,9 @@ function AppleIcon() {
 }
 
 const socialProviders = [
-  { label: "Google", Icon: GoogleIcon },
-  { label: "Facebook", Icon: FacebookIcon },
-  { label: "Apple", Icon: AppleIcon },
+  { label: "Google", Icon: GoogleIcon, strategy: "oauth_google" },
+  { label: "Facebook", Icon: FacebookIcon, strategy: "oauth_facebook" },
+  { label: "Apple", Icon: AppleIcon, strategy: "oauth_apple" },
 ] as const;
 
 // Eye icon — proper SVG-like eye drawn with Views
@@ -86,8 +97,28 @@ function EyeIcon({ visible }: { visible: boolean }) {
   );
 }
 
+function getAuthErrorMessage(error: unknown) {
+  if (isClerkAPIResponseError(error)) {
+    const firstError = error.errors[0];
+    return (
+      firstError?.longMessage ??
+      firstError?.message ??
+      "Something went wrong. Please try again."
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Something went wrong. Please try again.";
+}
+
 export function AuthScreen({ mode }: AuthScreenProps) {
   const router = useRouter();
+  const signInFlow = useSignIn();
+  const signUpFlow = useSignUp();
+  const { startSSOFlow } = useSSO();
   const copy = screenCopy[mode];
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
@@ -95,10 +126,219 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isVerificationVisible, setIsVerificationVisible] = useState(false);
+  const [verificationMode, setVerificationMode] =
+    useState<VerificationMode>(null);
+  const [signInEmailAddressId, setSignInEmailAddressId] = useState<
+    string | null
+  >(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
   const isSignUp = mode === "sign-up";
+  const isClerkReady = signInFlow.isLoaded && signUpFlow.isLoaded;
+  const canSubmit =
+    isClerkReady &&
+    !isSubmitting &&
+    email.trim().length > 0 &&
+    (!isSignUp || password.length > 0);
+
+  async function activateSession(
+    createdSessionId: string | null,
+    setActive: ((params: { session: string }) => Promise<void>) | undefined,
+  ) {
+    if (!createdSessionId || !setActive) {
+      throw new Error("Clerk did not return an active session.");
+    }
+
+    await setActive({ session: createdSessionId });
+    router.replace("/");
+  }
+
+  async function handleEmailAuth() {
+    if (!isClerkReady) {
+      return;
+    }
+
+    const emailAddress = email.trim().toLowerCase();
+
+    if (!emailAddress) {
+      setErrorMessage("Enter your email address to continue.");
+      return;
+    }
+
+    if (isSignUp && !password) {
+      setErrorMessage("Enter a password to create your account.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      if (isSignUp) {
+        const signUpAttempt = await signUpFlow.signUp.create({
+          emailAddress,
+          password,
+        });
+
+        if (signUpAttempt.status === "complete") {
+          await activateSession(
+            signUpAttempt.createdSessionId,
+            signUpFlow.setActive,
+          );
+          return;
+        }
+
+        await signUpAttempt.prepareEmailAddressVerification({
+          strategy: "email_code",
+        });
+        setVerificationMode("sign-up");
+        setIsVerificationVisible(true);
+        return;
+      }
+
+      const signInAttempt = await signInFlow.signIn.create({
+        identifier: emailAddress,
+      });
+
+      if (signInAttempt.status === "complete") {
+        await activateSession(
+          signInAttempt.createdSessionId,
+          signInFlow.setActive,
+        );
+        return;
+      }
+
+      const emailCodeFactor = signInAttempt.supportedFirstFactors?.find(
+        (factor) => factor.strategy === "email_code",
+      );
+
+      if (!emailCodeFactor) {
+        throw new Error("Email code sign-in is not enabled for this account.");
+      }
+
+      setSignInEmailAddressId(emailCodeFactor.emailAddressId);
+      await signInAttempt.prepareFirstFactor({
+        strategy: "email_code",
+        emailAddressId: emailCodeFactor.emailAddressId,
+      });
+      setVerificationMode("sign-in");
+      setIsVerificationVisible(true);
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleVerifyCode(code: string) {
+    if (!isClerkReady || !verificationMode) {
+      return false;
+    }
+
+    setErrorMessage(null);
+    setIsVerifying(true);
+
+    try {
+      if (verificationMode === "sign-up") {
+        const signUpAttempt =
+          await signUpFlow.signUp.attemptEmailAddressVerification({ code });
+
+        if (signUpAttempt.status !== "complete") {
+          throw new Error("Verification is not complete yet.");
+        }
+
+        await activateSession(
+          signUpAttempt.createdSessionId,
+          signUpFlow.setActive,
+        );
+        return true;
+      }
+
+      const signInAttempt = await signInFlow.signIn.attemptFirstFactor({
+        strategy: "email_code",
+        code,
+      });
+
+      if (signInAttempt.status !== "complete") {
+        throw new Error("Verification is not complete yet.");
+      }
+
+      await activateSession(
+        signInAttempt.createdSessionId,
+        signInFlow.setActive,
+      );
+      return true;
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+      return false;
+    } finally {
+      setIsVerifying(false);
+    }
+  }
+
+  async function handleResendCode() {
+    if (!isClerkReady || !verificationMode) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsResending(true);
+
+    try {
+      if (verificationMode === "sign-up") {
+        await signUpFlow.signUp.prepareEmailAddressVerification({
+          strategy: "email_code",
+        });
+        return;
+      }
+
+      if (!signInEmailAddressId) {
+        throw new Error("Start the sign-in flow again to request a new code.");
+      }
+
+      await signInFlow.signIn.prepareFirstFactor({
+        strategy: "email_code",
+        emailAddressId: signInEmailAddressId,
+      });
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsResending(false);
+    }
+  }
+
+  async function handleSocialAuth(strategy: OAuthStrategy) {
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy,
+        redirectUrl: Linking.createURL("/"),
+      });
+
+      if (!createdSessionId || !setActive) {
+        throw new Error("Social sign-in did not complete. Please try again.");
+      }
+
+      await setActive({ session: createdSessionId });
+      router.replace("/");
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function handleVerificationClose() {
+    setIsVerificationVisible(false);
+    setVerificationMode(null);
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -202,11 +442,15 @@ export function AuthScreen({ mode }: AuthScreenProps) {
             )}
           </View>
 
+          {errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+          {isSignUp && <View nativeID="clerk-captcha" />}
+
           {/* Primary CTA button */}
           <TouchableOpacity
             activeOpacity={0.88}
-            style={styles.ctaButton}
-            onPress={() => setIsVerificationVisible(true)}
+            disabled={!canSubmit}
+            style={[styles.ctaButton, !canSubmit && styles.buttonDisabled]}
+            onPress={handleEmailAuth}
           >
             {/* Right-side highlight sheen */}
             <View style={styles.ctaSheen} />
@@ -222,11 +466,16 @@ export function AuthScreen({ mode }: AuthScreenProps) {
 
           {/* Social providers */}
           <View style={styles.socialList}>
-            {socialProviders.map(({ label, Icon }) => (
+            {socialProviders.map(({ label, Icon, strategy }) => (
               <TouchableOpacity
                 activeOpacity={0.82}
-                style={styles.socialButton}
+                disabled={isSubmitting}
+                style={[
+                  styles.socialButton,
+                  isSubmitting && styles.buttonDisabled,
+                ]}
                 key={label}
+                onPress={() => handleSocialAuth(strategy)}
               >
                 <View style={styles.socialIconWrapper}>
                   <Icon />
@@ -249,7 +498,13 @@ export function AuthScreen({ mode }: AuthScreenProps) {
       </ScrollView>
 
       <VerificationCodeModal
-        onClose={() => setIsVerificationVisible(false)}
+        emailAddress={email.trim().toLowerCase()}
+        errorMessage={errorMessage}
+        isLoading={isVerifying}
+        isResending={isResending}
+        onClose={handleVerificationClose}
+        onResend={handleResendCode}
+        onVerify={handleVerifyCode}
         visible={isVerificationVisible}
       />
     </SafeAreaView>
@@ -378,6 +633,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     padding: 0,
   },
+  errorText: {
+    color: "#FF4D4F",
+    fontFamily: "Poppins-Regular",
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 12,
+  },
 
   // Password row
   passwordRow: {
@@ -431,6 +693,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 26,
     position: "relative",
+  },
+  buttonDisabled: {
+    opacity: 0.55,
   },
   ctaSheen: {
     position: "absolute",

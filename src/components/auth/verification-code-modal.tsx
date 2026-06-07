@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -16,6 +15,12 @@ import {
 type VerificationCodeModalProps = {
   visible: boolean;
   onClose: () => void;
+  onVerify: (code: string) => Promise<boolean>;
+  onResend: () => Promise<void>;
+  emailAddress?: string;
+  errorMessage?: string | null;
+  isLoading?: boolean;
+  isResending?: boolean;
 };
 
 const CODE_LENGTH = 6;
@@ -24,8 +29,13 @@ const DEEP_PURPLE = "#5B3FE4";
 export function VerificationCodeModal({
   visible,
   onClose,
+  onVerify,
+  onResend,
+  emailAddress,
+  errorMessage,
+  isLoading = false,
+  isResending = false,
 }: VerificationCodeModalProps) {
-  const router = useRouter();
   const inputRef = useRef<TextInput>(null);
   const [code, setCode] = useState("");
 
@@ -74,16 +84,21 @@ export function VerificationCodeModal({
     }
   }, [fadeAnim, slideAnim, visible]);
 
-  function handleCodeChange(value: string) {
+  async function handleCodeChange(value: string) {
+    if (isLoading) {
+      return;
+    }
+
     const nextCode = value.replace(/\D/g, "").slice(0, CODE_LENGTH);
     setCode(nextCode);
 
     if (nextCode.length === CODE_LENGTH) {
-      setTimeout(() => {
+      const isVerified = await onVerify(nextCode);
+
+      if (isVerified) {
         setCode("");
         onClose();
-        router.replace("/");
-      }, 280);
+      }
     }
   }
 
@@ -126,8 +141,9 @@ export function VerificationCodeModal({
             {/* Header */}
             <Text style={styles.cardTitle}>Check your email</Text>
             <Text style={styles.cardSubtitle}>
-              We sent a 6-digit code to your email address. Enter it below to
-              continue.
+              We sent a 6-digit code
+              {emailAddress ? ` to ${emailAddress}` : " to your email address"}.
+              Enter it below to continue.
             </Text>
 
             {/* Code boxes */}
@@ -157,6 +173,7 @@ export function VerificationCodeModal({
                 keyboardType="number-pad"
                 maxLength={CODE_LENGTH}
                 onChangeText={handleCodeChange}
+                editable={!isLoading}
                 ref={inputRef}
                 style={styles.hiddenInput}
                 textContentType="oneTimeCode"
@@ -164,11 +181,25 @@ export function VerificationCodeModal({
               />
             </View>
 
+            {errorMessage && (
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            )}
+
             {/* Resend */}
-            <TouchableOpacity activeOpacity={0.7} style={styles.resendButton}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              disabled={isLoading || isResending}
+              onPress={onResend}
+              style={[
+                styles.resendButton,
+                (isLoading || isResending) && styles.buttonDisabled,
+              ]}
+            >
               <Text style={styles.resendText}>
                 {"Didn't receive it? "}
-                <Text style={styles.resendAction}>Resend code</Text>
+                <Text style={styles.resendAction}>
+                  {isResending ? "Sending..." : "Resend code"}
+                </Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -290,6 +321,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
     alignItems: "center",
   },
+  buttonDisabled: {
+    opacity: 0.55,
+  },
   resendText: {
     fontFamily: "Poppins-Regular",
     fontSize: 14,
@@ -299,6 +333,14 @@ const styles = StyleSheet.create({
   resendAction: {
     fontFamily: "Poppins-SemiBold",
     color: DEEP_PURPLE,
+  },
+  errorText: {
+    color: "#FF4D4F",
+    fontFamily: "Poppins-Regular",
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 14,
+    textAlign: "center",
   },
 
   // Hidden input
