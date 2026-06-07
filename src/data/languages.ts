@@ -4,7 +4,7 @@ export const supportedLanguages = [
   {
     id: "spanish",
     name: "Spanish",
-    nativeName: "Espanol",
+    nativeName: "Español",
     countryCode: "ES",
     learnerCountLabel: "28.4M learners",
     accentColor: "#FF6B35",
