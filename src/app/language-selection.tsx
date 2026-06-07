@@ -1,6 +1,7 @@
 import { LanguageOptionCard } from "@/components/language/language-option-card";
 import { images } from "@/constants/images";
 import { defaultLanguageId, supportedLanguages } from "@/data/languages";
+import { useLearningPreferencesStore } from "@/store/learning-preferences-store";
 import type { LanguageId } from "@/types/learning";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -17,8 +18,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LanguageSelectionScreen() {
   const router = useRouter();
+  const savedLanguageId = useLearningPreferencesStore(
+    (state) => state.selectedLanguageId,
+  );
+  const setSelectedLanguage = useLearningPreferencesStore(
+    (state) => state.setSelectedLanguage,
+  );
   const [selectedLanguageId, setSelectedLanguageId] =
-    useState<LanguageId>(defaultLanguageId);
+    useState<LanguageId>(savedLanguageId ?? defaultLanguageId);
   const [searchQuery, setSearchQuery] = useState("");
 
   const visibleLanguages = useMemo(() => {
@@ -36,6 +43,7 @@ export default function LanguageSelectionScreen() {
   }, [searchQuery]);
 
   function handleConfirm() {
+    setSelectedLanguage(selectedLanguageId);
     router.replace("/");
   }
 
