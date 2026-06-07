@@ -1,9 +1,12 @@
 import { images } from "@/constants/images";
 import { Image } from "expo-image";
+import { Href, useRouter } from "expo-router";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OnboardingScreen() {
+  const router = useRouter();
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
       <ScrollView
@@ -25,7 +28,7 @@ export default function OnboardingScreen() {
             </View>
           </View>
 
-          <View className="mt-4">
+          <View className="mt-1">
             <Text className="font-poppins-bold text-[34px] leading-[43px] text-text-primary">
               Your AI language{"\n"}
               <Text className="text-lingua-deep-purple">teacher.</Text>
@@ -186,6 +189,7 @@ export default function OnboardingScreen() {
           <TouchableOpacity
             activeOpacity={0.86}
             className="h-[76px] flex-row items-center justify-center rounded-[22px] border-b-[4px] border-[#4A2EE0] bg-lingua-deep-purple px-8"
+            onPress={() => router.push("/sign-up" as Href)}
           >
             <Text className="font-poppins-semibold text-[18px] leading-[24px] text-white">
               Get Started
