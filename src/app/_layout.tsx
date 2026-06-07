@@ -1,5 +1,7 @@
 import "../../global.css";
 
+import { ClerkProvider } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
 import { fontAssets } from "@/theme";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -8,6 +10,14 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 
 SplashScreen.preventAutoHideAsync();
+
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+if (!publishableKey) {
+  throw new Error("Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to your .env file");
+}
+
+const clerkPublishableKey = publishableKey;
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
@@ -23,7 +33,10 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <ClerkProvider
+      publishableKey={clerkPublishableKey}
+      tokenCache={tokenCache}
+    >
       <Stack
         screenOptions={{
           contentStyle: { backgroundColor: "#FFFFFF" },
@@ -31,6 +44,6 @@ export default function RootLayout() {
         }}
       />
       <StatusBar style="dark" />
-    </>
+    </ClerkProvider>
   );
 }
