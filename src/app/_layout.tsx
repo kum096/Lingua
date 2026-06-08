@@ -7,6 +7,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import { PostHogProvider } from "posthog-react-native";
 import { useEffect } from "react";
 
 SplashScreen.preventAutoHideAsync();
@@ -33,17 +34,22 @@ export default function RootLayout() {
   }
 
   return (
-    <ClerkProvider
-      publishableKey={clerkPublishableKey}
-      tokenCache={tokenCache}
+    <PostHogProvider
+      apiKey={process.env.EXPO_PUBLIC_POSTHOG_KEY!}
+      options={{ host: process.env.EXPO_PUBLIC_POSTHOG_HOST }}
     >
-      <Stack
-        screenOptions={{
-          contentStyle: { backgroundColor: "#FFFFFF" },
-          headerShown: false,
-        }}
-      />
-      <StatusBar style="dark" />
-    </ClerkProvider>
+      <ClerkProvider
+        publishableKey={clerkPublishableKey}
+        tokenCache={tokenCache}
+      >
+        <Stack
+          screenOptions={{
+            contentStyle: { backgroundColor: "#FFFFFF" },
+            headerShown: false,
+          }}
+        />
+        <StatusBar style="dark" />
+      </ClerkProvider>
+    </PostHogProvider>
   );
 }

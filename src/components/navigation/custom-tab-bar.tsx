@@ -1,31 +1,14 @@
 import { colors } from "@/theme/colors";
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
-import { useEffect, useState } from "react";
-import {
-  LayoutChangeEvent,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-const TAB_BAR_HORIZONTAL_PADDING = 18;
-const ACTIVE_CIRCLE_SIZE = 50;
-const TAB_BAR_TOP_PADDING = 12;
-const TAB_BAR_BOTTOM_PADDING = 12;
-const ACTIVE_ICON_COLOR = "#FFFFFF";
+const ACTIVE_COLOR = colors.linguaDeepPurple;
 const INACTIVE_COLOR = "#7C849D";
 
 type TabIconName = SymbolViewProps["name"];
 
-const tabIcons: Record<string, TabIconName> = {
+const activeTabIcons: Record<string, TabIconName> = {
   home: {
     android: "home",
     ios: "house.fill",
@@ -53,64 +36,49 @@ const tabIcons: Record<string, TabIconName> = {
   },
 };
 
+const inactiveTabIcons: Record<string, TabIconName> = {
+  home: {
+    android: "home",
+    ios: "house",
+    web: "home",
+  },
+  learn: {
+    android: "menu_book",
+    ios: "book",
+    web: "menu_book",
+  },
+  "ai-teacher": {
+    android: "headphones",
+    ios: "headphones",
+    web: "headphones",
+  },
+  chat: {
+    android: "chat_bubble",
+    ios: "bubble.left",
+    web: "chat_bubble",
+  },
+  profile: {
+    android: "person",
+    ios: "person",
+    web: "person",
+  },
+};
+
 export function CustomTabBar({
   descriptors,
   insets,
   navigation,
   state,
 }: BottomTabBarProps) {
-  const [barWidth, setBarWidth] = useState(0);
-  const activeIndex = useSharedValue(state.index);
-  const itemWidth =
-    state.routes.length > 0
-      ? (barWidth - TAB_BAR_HORIZONTAL_PADDING * 2) / state.routes.length
-      : 0;
-  const activeRoute = state.routes[state.index];
-
-  useEffect(() => {
-    activeIndex.value = withTiming(state.index, {
-      duration: 280,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [activeIndex, state.index]);
-
-  const activeCircleStyle = useAnimatedStyle(() => ({
-    opacity: itemWidth > 0 ? 1 : 0,
-    transform: [
-      {
-        translateX:
-          TAB_BAR_HORIZONTAL_PADDING +
-          activeIndex.value * itemWidth +
-          itemWidth / 2 -
-          ACTIVE_CIRCLE_SIZE / 2,
-      },
-    ],
-  }));
-
-  function handleLayout(event: LayoutChangeEvent) {
-    setBarWidth(event.nativeEvent.layout.width);
-  }
-
   return (
     <View
-      onLayout={handleLayout}
       style={[
         styles.container,
         {
-          paddingBottom: Math.max(insets.bottom, TAB_BAR_BOTTOM_PADDING),
+          paddingBottom: Math.max(insets.bottom, 12),
         },
       ]}
     >
-      <Animated.View style={[styles.activeCircle, activeCircleStyle]}>
-        {activeRoute && (
-          <TabIcon
-            color={ACTIVE_ICON_COLOR}
-            name={tabIcons[activeRoute.name]}
-            size={26}
-          />
-        )}
-      </Animated.View>
-
       <View style={styles.items}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -144,19 +112,29 @@ export function CustomTabBar({
               key={route.key}
               onLongPress={handleLongPress}
               onPress={handlePress}
-              style={styles.item}
+              style={({ pressed }) => [
+                styles.item,
+                pressed && styles.itemPressed,
+              ]}
               testID={options.tabBarButtonTestID}
             >
-              {!isFocused && (
-                <View style={styles.inactiveItemContent}>
-                  <TabIcon
-                    color={INACTIVE_COLOR}
-                    name={tabIcons[route.name]}
-                    size={25}
-                  />
-                  <Text style={styles.label}>{label}</Text>
-                </View>
-              )}
+              <TabIcon
+                color={isFocused ? ACTIVE_COLOR : INACTIVE_COLOR}
+                name={
+                  isFocused
+                    ? activeTabIcons[route.name]
+                    : inactiveTabIcons[route.name]
+                }
+                size={29}
+              />
+              <Text
+                style={[
+                  styles.label,
+                  isFocused ? styles.activeLabel : styles.inactiveLabel,
+                ]}
+              >
+                {label}
+              </Text>
             </Pressable>
           );
         })}
@@ -195,47 +173,35 @@ function TabIcon({
 }
 
 const styles = StyleSheet.create({
-  activeCircle: {
-    alignItems: "center",
-    backgroundColor: colors.linguaPurple,
-    borderRadius: ACTIVE_CIRCLE_SIZE / 2,
-    height: ACTIVE_CIRCLE_SIZE,
-    justifyContent: "center",
-    left: 0,
-    position: "absolute",
-    top: TAB_BAR_TOP_PADDING,
-    width: ACTIVE_CIRCLE_SIZE,
-    zIndex: 2,
+  activeLabel: {
+    color: ACTIVE_COLOR,
   },
   container: {
     backgroundColor: colors.background,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    boxShadow: "0 -8px 28px rgba(13, 19, 43, 0.08)",
-    minHeight: 92,
-    paddingHorizontal: TAB_BAR_HORIZONTAL_PADDING,
-    paddingTop: TAB_BAR_TOP_PADDING,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    boxShadow: "0 -10px 30px rgba(13, 19, 43, 0.08)",
+    minHeight: 100,
+    paddingHorizontal: 20,
+    paddingTop: 15,
   },
-  inactiveItemContent: {
-    alignItems: "center",
-    gap: 4,
-    height: 58,
-    justifyContent: "center",
-    paddingTop: 2,
+  inactiveLabel: {
+    color: INACTIVE_COLOR,
   },
   item: {
     alignItems: "center",
     flex: 1,
-    height: 60,
+    gap: 5,
+    height: 64,
     justifyContent: "center",
+  },
+  itemPressed: {
+    opacity: 0.72,
   },
   items: {
     flexDirection: "row",
-    position: "relative",
-    zIndex: 3,
   },
   label: {
-    color: INACTIVE_COLOR,
     fontFamily: "Poppins-SemiBold",
     fontSize: 12,
     lineHeight: 16,
